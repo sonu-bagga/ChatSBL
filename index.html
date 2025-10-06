@@ -164,7 +164,7 @@
     .call-view { position: absolute; inset: 0; background: #000; display: none; }
     .call-view.active { display: block; }
     #remote-video { width: 100%; height: 100%; object-fit: cover; }
-    #local-video { position: absolute; right: 12px; bottom: 90px; width: 110px; height: 160px; border-radius: 12px; object-fit: cover; box-shadow: 0 6px 18px rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.85); cursor: move; }
+    #local-video { position: absolute; right: 12px; bottom: 90px; width: 110px; height: 160px; border-radius: 12px; object-fit: cover; box-shadow: 0 6px 18px rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.85); cursor: move; touch-action: none; }
     .call-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.1)); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 20px; color: #fff; }
     .caller-info { text-align: center; margin-bottom: 14px; }
     .caller-info .emoji { font-size: 36px; }
@@ -174,6 +174,7 @@
     .call-btn svg { width: 28px; height: 28px; color: #fff; }
     .end { background: #e91e63; }
     .accept { background: #4CAF50; }
+    .overlay-close { position: absolute; top: 10px; right: 10px; color: #fff; background: rgba(255,255,255,0.12); }
 
     /* Modals */
     .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -181,6 +182,8 @@
     .modal-content { background: #fff; width: 100%; max-width: 380px; border-radius: 12px; padding: 16px; box-shadow: 0 10px 30px var(--wa-shadow); }
     .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .modal-actions { display: inline-flex; gap: 6px; }
+
+    .chat-status { font-size: 11px; color: var(--wa-text-secondary); }
 
     /* Dark theme (basic) */
     #app-container[data-theme="dark"] { --wa-app-bg: #1f262d; --wa-text-primary: #e7edf1; --wa-text-secondary: #b6c2cc; --wa-border-color: #2f3a43; --wa-message-in-bg: #2a343d; --wa-message-out-bg: #153745; --wa-chat-bg: #182028; }
@@ -245,7 +248,10 @@
         </button>
         <div class="contact-info">
           <span id="chat-contact-emoji" aria-hidden="true">😊</span>
-          <span id="chat-contact-name">Contact</span>
+          <div style="display:flex;flex-direction:column;line-height:1.1;">
+            <span id="chat-contact-name">Contact</span>
+            <span id="chat-status" class="chat-status" aria-live="polite">—</span>
+          </div>
         </div>
         <div style="display:flex; gap:4px; justify-self:end;">
           <button id="voice-call-btn" class="icon-btn" aria-label="Voice Call">
@@ -283,6 +289,9 @@
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video" autoplay playsinline muted></video>
       <div class="call-overlay">
+        <button id="video-overlay-close" class="icon-btn overlay-close" aria-label="Close video">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
         <div class="caller-info">
           <div class="emoji" id="video-call-emoji">📞</div>
           <div class="name" id="video-call-name">Calling…</div>
@@ -299,6 +308,9 @@
     <div id="voice-call-view" class="call-view" aria-hidden="true">
       <audio id="remote-audio" autoplay></audio>
       <div class="call-overlay">
+        <button id="voice-overlay-close" class="icon-btn overlay-close" aria-label="Close audio">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
         <div class="caller-info">
           <div class="emoji" id="voice-call-emoji">📞</div>
           <div class="name" id="voice-call-name">Ringing…</div>
@@ -403,7 +415,10 @@
     </div>
 
     <!-- Audio -->
-    <audio id="ringtone" loop src="data:audio/wav;base64,UklGRmQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAZGF0YQwAAAABAQEBBQUFBQUHBwcICAkJCwsMDQ0NDg4ODw8PEBAQEhISExMTFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"></audio>
+    <audio id="ringtone" loop>
+      <source src="ringtone.mp3" type="audio/mpeg" />
+      <source src="data:audio/wav;base64,UklGRmQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAZGF0YQwAAAABAQEBBQUFBQUHBwcICAkJCwsMDQ0NDg4ODw8PEBAQEhISExMTFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU" type="audio/wav" />
+    </audio>
   </div>
 
   <!-- Firebase v8.10.1 -->
@@ -492,13 +507,22 @@
     // Auth
     const googleBtn = document.getElementById('google-login-btn');
     googleBtn?.addEventListener('click', async () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
       try {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        await auth.signInWithPopup(provider);
+        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          await auth.signInWithRedirect(provider);
+        } else {
+          await auth.signInWithPopup(provider);
+        }
       } catch (e) {
-        alert('Login failed: ' + (e && e.message ? e.message : e));
+        try {
+          await auth.signInWithRedirect(provider);
+        } catch (e2) {
+          alert('Login failed: ' + (e2 && e2.message ? e2.message : e2));
+        }
       }
     });
+    auth.getRedirectResult().catch(() => {});
 
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -518,7 +542,7 @@
           document.getElementById('profile-emoji').textContent = currentUserProfile.emoji || '🙂';
           document.getElementById('profile-id').textContent = 'ID: ' + (currentUserProfile.id || '—');
           document.getElementById('my-public-id').textContent = currentUserProfile.id || '—';
-          initAppAfterLogin();
+          if (!window.__appInitBound) { initAppAfterLogin(); window.__appInitBound = true; }
           showView('main-view');
         }
       });
@@ -588,7 +612,8 @@
     // Chat attach and send
     document.getElementById('attach-btn')?.addEventListener('click', () => document.getElementById('chat-attachment').click());
     document.getElementById('chat-send-btn')?.addEventListener('click', () => sendMessage());
-    document.getElementById('chat-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    document.getElementById('chat-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } else { setTyping(true); } });
+    document.getElementById('chat-input')?.addEventListener('blur', () => setTyping(false));
 
     // Send friend request
     document.getElementById('send-friend-request-btn')?.addEventListener('click', async () => {
@@ -619,6 +644,8 @@
 
     document.getElementById('end-call-btn-voice')?.addEventListener('click', () => endCall());
     document.getElementById('end-call-btn-video')?.addEventListener('click', () => endCall());
+    document.getElementById('voice-overlay-close')?.addEventListener('click', () => endCall());
+    document.getElementById('video-overlay-close')?.addEventListener('click', () => endCall());
 
     // After login initialization
     let contactsUnsub = null;
@@ -626,6 +653,8 @@
     let unreadUnsub = null;
     let callsIncomingUnsub = null;
     let callLogsUnsub = null;
+    let presenceInterval = null;
+    let remoteTypingUnsub = null;
 
     function initAppAfterLogin() {
       bindContactsListener();
@@ -633,6 +662,7 @@
       bindUnreadListener();
       bindIncomingCallsListener();
       bindCallLogsListener();
+      startPresence();
     }
 
     // Contacts
@@ -673,6 +703,7 @@
       bindMessagesListener();
       // Reset unread count
       db.ref('unreadCounts').child(currentUser.uid).child(currentChatId).set(0);
+      bindTypingIndicator(partnerProfile.uid);
     }
 
     // Requests / Updates
@@ -738,6 +769,13 @@
         row.className = 'message-row ' + (fromMe ? 'message-sent' : 'message-received');
         const bubble = document.createElement('div');
         bubble.className = 'message-bubble';
+        if (fromMe) {
+          bubble.addEventListener('contextmenu', async (ev) => {
+            ev.preventDefault();
+            const ok = confirm('Delete this message?');
+            if (ok) await db.ref('messages').child(currentChatId).child(snap.key).remove();
+          });
+        }
         if (msg.text) {
           const p = document.createElement('div'); p.textContent = msg.text; bubble.appendChild(p);
         }
@@ -926,10 +964,18 @@
 
     function bindIce(role, callId) {
       if (!peerConnection) return;
+      const pending = [];
+      let ready = false;
       peerConnection.onicecandidate = (e) => {
         if (!e.candidate) return;
-        db.ref('iceCandidates').child(callId).child(role).push(e.candidate.toJSON());
+        const c = e.candidate.toJSON();
+        if (!ready) pending.push(c); else db.ref('iceCandidates').child(callId).child(role).push(c);
       };
+      const markReady = () => {
+        if (ready) return; ready = true; pending.forEach(c => db.ref('iceCandidates').child(callId).child(role).push(c)); pending.length = 0;
+      };
+      peerConnection.onicegatheringstatechange = () => { if (peerConnection.iceGatheringState === 'complete') markReady(); };
+      setTimeout(markReady, 2000);
     }
 
     async function endCall() {
@@ -976,6 +1022,51 @@
       const tone = document.getElementById('ringtone');
       try { if (playing) tone.play(); else { tone.pause(); tone.currentTime = 0; } } catch {}
     }
+
+    // Presence & typing
+    function startPresence() {
+      if (!currentUser) return;
+      const presenceRef = db.ref('presence').child(currentUser.uid);
+      const connRef = db.ref('.info/connected');
+      connRef.on('value', (snap) => {
+        if (snap.val() === true) {
+          presenceRef.onDisconnect().set({ state: 'offline', at: Date.now() });
+          presenceRef.set({ state: 'online', at: Date.now() });
+        }
+      });
+      if (presenceInterval) clearInterval(presenceInterval);
+      presenceInterval = setInterval(() => presenceRef.update({ at: Date.now() }), 50000);
+    }
+
+    function setTyping(isTyping) {
+      if (!currentUser || !currentChatPartner) return;
+      db.ref('typing').child(currentChatPartner.uid).child(currentUser.uid).set(!!isTyping);
+    }
+
+    function bindTypingIndicator(partnerUid) {
+      remoteTypingUnsub && remoteTypingUnsub();
+      const ref = db.ref('typing').child(currentUser.uid).child(partnerUid);
+      const el = document.getElementById('chat-status');
+      const onValue = (snap) => {
+        const t = !!snap.val();
+        el.textContent = t ? 'typing…' : 'online';
+      };
+      ref.on('value', onValue);
+      remoteTypingUnsub = () => ref.off('value', onValue);
+    }
+
+    // Make local video draggable
+    (function enableDragLocalVideo(){
+      const el = document.getElementById('local-video');
+      if (!el) return;
+      let sx=0, sy=0, ox=0, oy=0, dragging=false;
+      const start = (e)=>{ dragging=true; const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY; const r=el.getBoundingClientRect(); ox=r.left; oy=r.top; };
+      const move = (e)=>{ if(!dragging) return; const p=e.touches?e.touches[0]:e; const dx=p.clientX-sx; const dy=p.clientY-sy; el.style.left=(ox+dx)+'px'; el.style.top=(oy+dy)+'px'; el.style.right='auto'; el.style.bottom='auto'; };
+      const end = ()=> dragging=false;
+      el.addEventListener('mousedown', start); el.addEventListener('touchstart', start);
+      window.addEventListener('mousemove', move); window.addEventListener('touchmove', move);
+      window.addEventListener('mouseup', end); window.addEventListener('touchend', end);
+    })();
 
     // Calls tab: call logs
     function bindCallLogsListener() {

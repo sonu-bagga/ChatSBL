@@ -101,6 +101,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onCloseWindow(WebView window) {
+                if (webView.canGoBack()) webView.goBack();
+                else finish();
+            }
+
+            @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
                                              FileChooserParams fileChooserParams) {
                 if (MainActivity.this.filePathCallback != null) {
