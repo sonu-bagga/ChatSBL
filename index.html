@@ -142,6 +142,7 @@
     .message-sent .message-bubble { background: var(--wa-message-out-bg); border-top-right-radius: 4px; }
     .message-received .message-bubble { background: var(--wa-message-in-bg); border-top-left-radius: 4px; }
     .message-attachment { max-width: 220px; border-radius: 10px; display: block; margin-top: 6px; }
+    .msg-meta { margin-top: 4px; font-size: 11px; color: var(--wa-text-secondary); text-align: right; }
 
     #chat-input-container {
       position: absolute; left: 0; right: 0; bottom: 0; padding: 10px; background: rgba(240,242,245,0.98); border-top: 1px solid var(--wa-border-color); display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px;
@@ -785,11 +786,22 @@
         if (msg.type === 'video' && msg.attachmentData) {
           const video = document.createElement('video'); video.className = 'message-attachment'; video.controls = true; video.src = msg.attachmentData; bubble.appendChild(video);
         }
+        // meta: time + seen
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta';
+        const timeStr = new Date(msg.at || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const seenStr = fromMe ? (msg.seen ? ' • seen' : '') : '';
+        meta.textContent = timeStr + seenStr;
+        bubble.appendChild(meta);
         row.appendChild(bubble);
         container.appendChild(row);
         scrollMessagesToBottom();
         // mark as read if from partner
-        if (!fromMe) db.ref('unreadCounts').child(currentUser.uid).child(currentChatId).set(0);
+        if (!fromMe) {
+          db.ref('unreadCounts').child(currentUser.uid).child(currentChatId).set(0);
+          // mark last message seen for partner
+          db.ref('messages').child(currentChatId).child(snap.key).update({ seen: true }).catch(()=>{});
+        }
       };
       ref.on('child_added', onChild);
       messagesUnsub = () => ref.off('child_added', onChild);
@@ -1047,12 +1059,17 @@
       remoteTypingUnsub && remoteTypingUnsub();
       const ref = db.ref('typing').child(currentUser.uid).child(partnerUid);
       const el = document.getElementById('chat-status');
-      const onValue = (snap) => {
-        const t = !!snap.val();
-        el.textContent = t ? 'typing…' : 'online';
-      };
+      let online = false; let typing = false;
+      const render = () => { el.textContent = typing ? 'typing…' : (online ? 'online' : 'offline'); };
+      const onValue = (snap) => { typing = !!snap.val(); render(); };
       ref.on('value', onValue);
       remoteTypingUnsub = () => ref.off('value', onValue);
+      // presence of partner
+      const presRef = db.ref('presence').child(partnerUid);
+      const onPres = (s) => { const v = s.val(); online = v && v.state === 'online'; render(); };
+      presRef.on('value', onPres);
+      const prevUnsub = remoteTypingUnsub;
+      remoteTypingUnsub = () => { prevUnsub && prevUnsub(); presRef.off('value', onPres); };
     }
 
     // Make local video draggable
